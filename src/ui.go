@@ -286,7 +286,7 @@ func (ui *UI) handlecommand(cmd uicommand) {
 }
 
 // A method of UI that displays a message recieved from a peer
-func (ui *UI) display_chatmessage(msg chatmessage) {
+func (ui *UI) display_chatmessage(msg ChatMessage) {
 	prompt := fmt.Sprintf("[green]<%s>:[-]", msg.SenderName)
 	fmt.Fprintf(ui.messageBox, "%s %s\n", prompt, msg.Message)
 }

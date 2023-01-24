@@ -2,11 +2,11 @@ package src
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"google.golang.org/protobuf/proto"
 )
 
 // Represents the default fallback room and user names
@@ -20,7 +20,7 @@ type ChatRoom struct {
 	Host *P2P
 
 	// Represents the channel of incoming messages
-	Inbound chan chatmessage
+	Inbound chan ChatMessage
 	// Represents the channel of outgoing messages
 	Outbound chan string
 	// Represents the channel of chat log messages
@@ -41,13 +41,6 @@ type ChatRoom struct {
 	pstopic *pubsub.Topic
 	// Represents the PubSub Subscription for the topic
 	psub *pubsub.Subscription
-}
-
-// A structure that represents a chat message
-type chatmessage struct {
-	Message    string `json:"message"`
-	SenderID   string `json:"senderid"`
-	SenderName string `json:"sendername"`
 }
 
 // A structure that represents a chat log
@@ -93,7 +86,7 @@ func JoinChatRoom(p2phost *P2P, username string, roomname string) (*ChatRoom, er
 	chatroom := &ChatRoom{
 		Host: p2phost,
 
-		Inbound:  make(chan chatmessage),
+		Inbound:  make(chan ChatMessage),
 		Outbound: make(chan string),
 		Logs:     make(chan chatlog),
 
@@ -126,14 +119,14 @@ func (cr *ChatRoom) PubLoop() {
 
 		case message := <-cr.Outbound:
 			// Create a ChatMessage
-			m := chatmessage{
+			m := &ChatMessage{
 				Message:    message,
 				SenderID:   cr.selfid.Pretty(),
 				SenderName: cr.UserName,
 			}
 
-			// Marshal the ChatMessage into a JSON
-			messagebytes, err := json.Marshal(m)
+			// Marshal the ChatMessage to Protobuf
+			messagebytes, err := proto.Marshal(m)
 			if err != nil {
 				cr.Logs <- chatlog{logprefix: "puberr", logmsg: "could not marshal JSON"}
 				continue
@@ -176,9 +169,9 @@ func (cr *ChatRoom) SubLoop() {
 			}
 
 			// Declare a ChatMessage
-			cm := &chatmessage{}
+			cm := &ChatMessage{}
 			// Unmarshal the message data into a ChatMessage
-			err = json.Unmarshal(message.Data, cm)
+			err = proto.Unmarshal(message.Data, cm)
 			if err != nil {
 				cr.Logs <- chatlog{logprefix: "suberr", logmsg: "could not unmarshal JSON"}
 				continue

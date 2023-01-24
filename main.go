@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/manishmeganathan/peerchat/src"
+	"github.com/kmrov/peerchat/src"
 	"github.com/sirupsen/logrus"
 )
 

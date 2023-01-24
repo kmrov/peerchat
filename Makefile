@@ -8,27 +8,31 @@ help:
 	@echo "'build-linux' - Builds the application for Linux platforms"
 	@echo "'build-all' - Builds the application for all platforms"
 
-build:
+protoc:
+	@echo Compiling Protobuf message definitions
+	protoc -I . --go_out=. msg.proto
+
+build: protoc
 	@echo Compiling PeerChat
 	@go build .
 	@echo Compile Complete. Run './peerchat(.exe)'
 
-install:
+install: protoc
 	@echo Installing PeerChat
 	go install .
 	@echo install Complete. Run 'peerchat'.
 
-build-windows:
+build-windows: protoc
 	@echo Cross Compiling PeerChat for Windows x86
 	@GOOS=windows GOARCH=386 go build -o ./bin/peerchat-windows-x32.exe
 	@echo Cross Compiling PeerChat for Windows x64
 	@GOOS=windows GOARCH=amd64 go build -o ./bin/peerchat-windows-x64.exe
 
-build-darwin:
+build-darwin: protoc
 	@echo Cross Compiling PeerChat for MacOSX x64
 	@GOOS=darwin GOARCH=amd64 go build -o ./bin/peerchat-darwin-x64
 
-build-linux:
+build-linux: protoc
 	@echo Cross Compiling PeerChat for Linux x32
 	@GOOS=linux GOARCH=386 go build -o ./bin/peerchat-linux-x32
 	@echo Cross Compiling PeerChat for Linux x64

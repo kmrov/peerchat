@@ -1,0 +1,9 @@
+syntax = "proto3";
+package src;
+option go_package = "./src";
+
+message ChatMessage {
+    string Message = 1;
+    string SenderID = 2;
+    string SenderName = 3;
+}

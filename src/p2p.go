@@ -9,24 +9,24 @@ import (
 
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p"
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/routing"
-	discovery "github.com/libp2p/go-libp2p-discovery"
-	host "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	tls "github.com/libp2p/go-libp2p-tls"
-	yamux "github.com/libp2p/go-libp2p-yamux"
-	"github.com/libp2p/go-tcp-transport"
+	core "github.com/libp2p/go-libp2p/core"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/routing"
+	discovery "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	yamux "github.com/libp2p/go-libp2p/p2p/muxer/yamux"
+	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/mr-tron/base58/base58"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-multihash"
 	"github.com/sirupsen/logrus"
 )
 
-const service = "manishmeganathan/peerchat"
+const service = "kmrov/peerchat"
 
 // A structure that represents a P2P Host
 type P2P struct {
@@ -34,7 +34,7 @@ type P2P struct {
 	Ctx context.Context
 
 	// Represents the libp2p host
-	Host host.Host
+	Host core.Host
 
 	// Represents the DHT routing table
 	KadDHT *dht.IpfsDHT
@@ -158,9 +158,9 @@ func (p2p *P2P) AnnounceConnect() {
 
 // A function that generates the p2p configuration options and creates a
 // libp2p host object for the given context. The created host is returned
-func setupHost(ctx context.Context) (host.Host, *dht.IpfsDHT) {
+func setupHost(ctx context.Context) (core.Host, *dht.IpfsDHT) {
 	// Set up the host identity options
-	prvkey, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
+	prvkey, _, err := crypto.GenerateKeyPairWithReader(crypto.Ed25519, 2048, rand.Reader)
 	identity := libp2p.Identity(prvkey)
 	// Handle any potential error
 	if err != nil {
@@ -173,8 +173,8 @@ func setupHost(ctx context.Context) (host.Host, *dht.IpfsDHT) {
 	logrus.Traceln("Generated P2P Identity Configuration.")
 
 	// Set up TLS secured TCP transport and options
-	tlstransport, err := tls.New(prvkey)
-	security := libp2p.Security(tls.ID, tlstransport)
+	// tlstransport, err := tls.New(tls.ID, prvkey, nil)
+	security := libp2p.Security(tls.ID, tls.New)
 	transport := libp2p.Transport(tcp.NewTCPTransport)
 	// Handle any potential error
 	if err != nil {
@@ -201,14 +201,24 @@ func setupHost(ctx context.Context) (host.Host, *dht.IpfsDHT) {
 
 	// Set up the stream multiplexer and connection manager options
 	muxer := libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport)
-	conn := libp2p.ConnectionManager(connmgr.NewConnManager(100, 400, time.Minute))
+	mgr, err := connmgr.NewConnManager(100, 400)
+
+	// Handle any potential error
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Fatalln("Failed to create a connection manager!")
+	}
+
+	conn := libp2p.ConnectionManager(mgr)
 
 	// Trace log
 	logrus.Traceln("Generated P2P Stream Multiplexer, Connection Manager Configurations.")
 
-	// Setup NAT traversal and relay options
+	// Setup NAT traversal options
 	nat := libp2p.NATPortMap()
-	relay := libp2p.EnableAutoRelay()
+	// AutoRelay is disabled for now
+	// relay := libp2p.EnableAutoRelay()
 
 	// Trace log
 	logrus.Traceln("Generated P2P NAT Traversal and Relay Configurations.")
@@ -216,7 +226,7 @@ func setupHost(ctx context.Context) (host.Host, *dht.IpfsDHT) {
 	// Declare a KadDHT
 	var kaddht *dht.IpfsDHT
 	// Setup a routing configuration with the KadDHT
-	routing := libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+	routing := libp2p.Routing(func(h core.Host) (routing.PeerRouting, error) {
 		kaddht = setupKadDHT(ctx, h)
 		return kaddht, err
 	})
@@ -224,10 +234,10 @@ func setupHost(ctx context.Context) (host.Host, *dht.IpfsDHT) {
 	// Trace log
 	logrus.Traceln("Generated P2P Routing Configurations.")
 
-	opts := libp2p.ChainOptions(identity, listen, security, transport, muxer, conn, nat, routing, relay)
+	opts := libp2p.ChainOptions(identity, listen, security, transport, muxer, conn, nat, routing)
 
 	// Construct a new libP2P host with the created options
-	libhost, err := libp2p.New(ctx, opts)
+	libhost, err := libp2p.New(opts)
 	// Handle any potential error
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -240,7 +250,7 @@ func setupHost(ctx context.Context) (host.Host, *dht.IpfsDHT) {
 }
 
 // A function that generates a Kademlia DHT object and returns it
-func setupKadDHT(ctx context.Context, nodehost host.Host) *dht.IpfsDHT {
+func setupKadDHT(ctx context.Context, nodehost core.Host) *dht.IpfsDHT {
 	// Create DHT server mode option
 	dhtmode := dht.Mode(dht.ModeServer)
 	// Rertieve the list of boostrap peer addresses
@@ -266,7 +276,7 @@ func setupKadDHT(ctx context.Context, nodehost host.Host) *dht.IpfsDHT {
 
 // A function that generates a PubSub Handler object and returns it
 // Requires a node host and a routing discovery service.
-func setupPubSub(ctx context.Context, nodehost host.Host, routingdiscovery *discovery.RoutingDiscovery) *pubsub.PubSub {
+func setupPubSub(ctx context.Context, nodehost core.Host, routingdiscovery *discovery.RoutingDiscovery) *pubsub.PubSub {
 	// Create a new PubSub service which uses a GossipSub router
 	pubsubhandler, err := pubsub.NewGossipSub(ctx, nodehost, pubsub.WithDiscovery(routingdiscovery))
 	// Handle any potential error
@@ -283,7 +293,7 @@ func setupPubSub(ctx context.Context, nodehost host.Host, routingdiscovery *disc
 
 // A function that bootstraps a given Kademlia DHT to satisfy the IPFS router
 // interface and connects to all the bootstrap peers provided by libp2p
-func bootstrapDHT(ctx context.Context, nodehost host.Host, kaddht *dht.IpfsDHT) {
+func bootstrapDHT(ctx context.Context, nodehost core.Host, kaddht *dht.IpfsDHT) {
 	// Bootstrap the DHT to satisfy the IPFS Router interface
 	if err := kaddht.Bootstrap(ctx); err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -333,7 +343,7 @@ func bootstrapDHT(ctx context.Context, nodehost host.Host, kaddht *dht.IpfsDHT) 
 
 // A function that connects the given host to all peers recieved from a
 // channel of peer address information. Meant to be started as a go routine.
-func handlePeerDiscovery(nodehost host.Host, peerchan <-chan peer.AddrInfo) {
+func handlePeerDiscovery(nodehost core.Host, peerchan <-chan peer.AddrInfo) {
 	// Iterate over the peer channel
 	for peer := range peerchan {
 		// Ignore if the discovered peer is the host itself
