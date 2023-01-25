@@ -3,7 +3,19 @@ package src;
 option go_package = "./src";
 
 message ChatMessage {
-    string Message = 1;
-    string SenderID = 2;
-    string SenderName = 3;
+    string username = 1;
+    string text = 2;
+    string signature = 3;
+}
+
+message Registration {
+    string username = 1;
+    string pubkey = 2;
+}
+
+message Message {
+    oneof content {
+        ChatMessage chat_message = 1;
+        Registration registration = 2;
+    }
 }

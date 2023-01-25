@@ -3,6 +3,7 @@ package src
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -20,7 +21,7 @@ type ChatRoom struct {
 	Host *P2P
 
 	// Represents the channel of incoming messages
-	Inbound chan ChatMessage
+	Inbound chan Message
 	// Represents the channel of outgoing messages
 	Outbound chan string
 	// Represents the channel of chat log messages
@@ -86,7 +87,7 @@ func JoinChatRoom(p2phost *P2P, username string, roomname string) (*ChatRoom, er
 	chatroom := &ChatRoom{
 		Host: p2phost,
 
-		Inbound:  make(chan ChatMessage),
+		Inbound:  make(chan Message),
 		Outbound: make(chan string),
 		Logs:     make(chan chatlog),
 
@@ -118,11 +119,22 @@ func (cr *ChatRoom) PubLoop() {
 			return
 
 		case message := <-cr.Outbound:
-			// Create a ChatMessage
-			m := &ChatMessage{
-				Message:    message,
-				SenderID:   cr.selfid.Pretty(),
-				SenderName: cr.UserName,
+			m := &Message{}
+			if strings.HasPrefix(message, "#register") {
+				parts := strings.Fields(message)
+				m.Content = &Message_Registration{
+					Registration: &Registration{
+						Username: parts[1],
+					},
+				}
+			} else {
+				// Create a ChatMessage
+				m.Content = &Message_ChatMessage{
+					ChatMessage: &ChatMessage{
+						Text:     message,
+						Username: cr.UserName,
+					},
+				}
 			}
 
 			// Marshal the ChatMessage to Protobuf
@@ -169,7 +181,7 @@ func (cr *ChatRoom) SubLoop() {
 			}
 
 			// Declare a ChatMessage
-			cm := &ChatMessage{}
+			cm := &Message{}
 			// Unmarshal the message data into a ChatMessage
 			err = proto.Unmarshal(message.Data, cm)
 			if err != nil {

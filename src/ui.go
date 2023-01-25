@@ -203,8 +203,8 @@ func (ui *UI) starteventhandler() {
 			go ui.handlecommand(cmd)
 
 		case msg := <-ui.Inbound:
-			// Print the recieved messages to the message box
-			ui.display_chatmessage(msg)
+			// Print the received messages to the message box
+			ui.display_message(msg)
 
 		case log := <-ui.Logs:
 			// Add the log to the message box
@@ -286,9 +286,15 @@ func (ui *UI) handlecommand(cmd uicommand) {
 }
 
 // A method of UI that displays a message recieved from a peer
-func (ui *UI) display_chatmessage(msg ChatMessage) {
-	prompt := fmt.Sprintf("[green]<%s>:[-]", msg.SenderName)
-	fmt.Fprintf(ui.messageBox, "%s %s\n", prompt, msg.Message)
+func (ui *UI) display_message(msg Message) {
+	cm := msg.GetChatMessage()
+	reg := msg.GetRegistration()
+	if cm != nil {
+		prompt := fmt.Sprintf("[green]<%s>:[-]", cm.Username)
+		fmt.Fprintf(ui.messageBox, "%s %s\n", prompt, cm.Text)
+	} else if reg != nil {
+		fmt.Fprintf(ui.messageBox, "User registered: %s\n", reg.Username)
+	}
 }
 
 // A method of UI that displays a message recieved from self
